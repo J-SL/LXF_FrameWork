@@ -1,14 +1,14 @@
-using System.Runtime.Serialization.Formatters.Binary;
+using Cysharp.Threading.Tasks;
+using LXF_Framework.DependencyInjection;
+using LXF_Framework.MonoYield;
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using UnityEngine;
 using System.IO;
-using UnityEngine.SceneManagement;
-using Cysharp.Threading.Tasks;
+using System.Runtime.Serialization.Formatters.Binary;
+using UnityEngine;
 using UnityEngine.Pool;
-using Newtonsoft.Json;
-using Unity.VisualScripting;
+using UnityEngine.SceneManagement;
 
 namespace LXF_Framework
 {
@@ -979,103 +979,6 @@ namespace LXF_Framework
                 }
             }
         }
-    //=============================================================
-
-        public static class LXF_SaveSystem{
-
-            public readonly static string FilePath = Application.persistentDataPath;
-   
-            public static void SaveAll(IEnumerable<ISerialization> objs){
-                foreach (var obj in objs){
-                    Save(obj);
-                }
-            }
-
-            public static void LoadAll(IEnumerable<ISerialization> objs){
-                foreach (var obj in objs){
-                    Load(obj);
-                }
-            }
-
-            public static void Save(ISerialization obj)=> obj.Serialize(new LXF_Saver(obj.FileName));
-
-            public static void Load(ISerialization obj)=> obj.Deserialize(new LXF_Loader(obj.FileName));           //private static
-        }
-
-        public interface ISerialization{
-            string FileName { get; set;}
-            void Serialize(LXF_Saver saver);
-            void Deserialize(LXF_Loader loader);
-        }
-
-       public class LXF_Saver {
-            readonly string _filePath;
-            public LXF_Saver(string fileName){
-                _filePath=LXF_SaveSystem.FilePath+"/"+fileName;
-
-                if (!File.Exists(_filePath))
-                {            
-                    Debug.Log($"{_filePath} not exist, automatically create a new file");
-                }
-            }
-            public Dictionary<string, string> Values{get;private set;} = new();
-
-            public void Add<T>(string valueName,T value) where T : struct {
-                string json = JsonConvert.SerializeObject(value);
-                Values.Add(valueName,json);
-            }
-
-            public void Add(string valueName,IntegerMonitor integer) {
-                string json = JsonConvert.SerializeObject(integer);
-                Values.Add(valueName,json);
-            }
-
-            public void Add(string valueName,FloatMonitor _float) {
-                string json = JsonConvert.SerializeObject(_float);
-                Values.Add(valueName,json);
-            }
-
-            public void Add(string valueName,BoolenMonitor boolen){
-                string json = JsonConvert.SerializeObject(boolen);
-                Values.Add(valueName,json);           
-            }
-
-            public void End(){
-                string jsonString = JsonConvert.SerializeObject(Values, Formatting.Indented);
-                File.WriteAllText(_filePath, jsonString);
-            }        
-        }
-
-        public class LXF_Loader{
-
-            public LXF_Loader(string fileName){
-                string filePath=LXF_SaveSystem.FilePath+"/"+fileName;
-
-                if (File.Exists(filePath))
-                {
-                    string jsonData = File.ReadAllText(filePath);  
-                    Values = JsonConvert.DeserializeObject<Dictionary<string, string>>(jsonData);            
-                }else{
-                    Debug.LogError($"Load failed, please check {filePath}");
-                }
-            }
-
-            private Dictionary<string, string> Values = new ();
-
-
-            private T GetValue<T>(string valueKey) where T : struct
-            {
-                if (Values.ContainsKey(valueKey)) {
-                    return JsonConvert.DeserializeObject<T>(Values[valueKey]);
-                } 
-                else {
-                    throw new KeyNotFoundException($"Key '{valueKey}' not found in the dictionary.");
-                }
-            }
-
-            public void OnLoad<T>(string valueName,ref T value)where T : struct
-                =>value=GetValue<T>(valueName);
-        }
 
     }
 
@@ -1099,78 +1002,133 @@ namespace LXF_Framework
                 }
             }
 
-
-        }
-
-    }
-
-    #region SequenceExecutor
-    public class SequenceExecutor : MonoBehaviour
-    {
-        public static SequenceExecutor Instance { get; protected set; }
-
-        private void Awake()
-        {
-            Instance ??= this;
-            if (Instance != this)
+            public static async UniTask LoadTargetScene(string sceneName)
             {
-                Instance = this;
-            }
+                AsyncOperation asyncOperation = SceneManager.LoadSceneAsync(sceneName);
+                asyncOperation.allowSceneActivation = false;
 
-            DontDestroyOnLoad(gameObject);
-        }
-
-        public void StartTailEndCallCoroutine(SequentialExecution.Calls c) => StartCoroutine(c.TailEndCall());
-
-    }
-
-    /// <summary>
-    /// ����ction����Mark���monitor�ʹ�action.Mark4���
-    /// </summary>
-    public class PackMethod
-    {
-        Action action;
-        Func<bool> monitor;
-        public PackMethod(Action action, Func<bool> monitor)
-        {
-            this.action = action;
-            this.monitor = monitor;
-        }
-
-        public void Method() => action();
-
-        public bool Monitor() => monitor();
-    }
-    public static class SequentialExecution
-    {
-        public static void SeriesMethodExecutor(params PackMethod[] methods)
-        {
-            var c = new Calls(methods);
-            SequenceExecutor.Instance.StartTailEndCallCoroutine(c);
-        }
-
-        public class Calls
-        {
-            private PackMethod[] methods;
-            public Calls(params PackMethod[] methods)
-            {
-                this.methods = methods;
-            }
-            public IEnumerator TailEndCall()
-            {
-                foreach (var method in methods)
+                while (!asyncOperation.isDone)
                 {
-                    method.Method();
-                    while (!method.Monitor())
-                        yield return null;
+                    Debug.Log("asyncOperation.progress: " + asyncOperation.progress);
+                    if (asyncOperation.progress >= 0.9f)
+                    {
+                        asyncOperation.allowSceneActivation = true;
+                    }
+                    await UniTask.Yield();
                 }
             }
         }
+
     }
-    #endregion
+
+    namespace DependencyInjection
+    {
+        public enum InjectionMode
+        {
+            SingleMono,
+            TargetObject,
+            NormalClass,
+            Self
+        }
+
+        public enum ProvideMode
+        {
+            GameObject,
+            SingleMonoList,
+            Method
+        }
+
+        [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
+        public sealed class LXF_InjectAttribute : Attribute
+        {
+            public LXF_InjectAttribute(InjectionMode injectionType = InjectionMode.SingleMono)
+            {
+                InjectionMode = injectionType;
+            }
+
+            public LXF_InjectAttribute(string targetObjectNameIn_LXF_Provider)
+            {
+                InjectionMode = InjectionMode.TargetObject;
+
+                ObjectName = targetObjectNameIn_LXF_Provider;
+            }
+
+            public readonly InjectionMode InjectionMode;
+            public readonly string ObjectName;
+        }
+
+        [AttributeUsage(AttributeTargets.Method | AttributeTargets.Field)]
+        public sealed class LXF_ProvideAttribute : Attribute
+        {
+            public LXF_ProvideAttribute(ProvideMode provideMode = ProvideMode.GameObject)
+            {
+                ProvideMode = provideMode;
+            }
+
+            public readonly ProvideMode ProvideMode;       
+
+        }
+
+        public interface IDependencyProvider { }
+
+        [RequireComponent(typeof(LXF_Injector))]
+        public abstract class LXF_Provider :LXF_Singleton<LXF_Provider>, IDependencyProvider
+        {
+            protected override void Awake()
+            {
+                InitializeSingleton(false);
+            }
+
+            [LXF_Provide(ProvideMode.SingleMonoList)]
+            public List<LXF_MonoYield> SingleMonosInScene = new();//the single mono script in scene
+        }
+    }
+
+    namespace MonoYield
+    {
+        public class LXF_MonoYield : MonoBehaviour
+        {
+            #region DI 
+            public bool IsInjected { get; private set; } = false;
+
+
+            public void SetActive_DI(GameObject gameObject)
+            {
+                gameObject.SetActive(true);
+
+                var monoBehaviours = gameObject.GetComponentsInChildren<LXF_MonoYield>();
+
+                foreach (var mb in monoBehaviours)
+                {
+                    if (mb.IsInjected) continue;
+
+                    LXF_Injector.Instance.Inject(mb);
+                    mb.IsInjected = true;
+                }
+            }
+
+            public T Instantiate_DI<T>(T prefab) where T : Component
+            {
+                var instance = Instantiate(prefab);
+
+                var monoBehaviours = instance.GetComponentsInChildren<LXF_MonoYield>();
+
+                foreach (var mb in monoBehaviours)
+                {
+                    if (mb.IsInjected) continue;
+
+                    LXF_Injector.Instance.Inject(mb);
+                    mb.IsInjected = true;
+                }
+
+                return instance;
+            }
+            #endregion
+        }
+    }
 
     #region Singleton
-    public class LXF_Singleton<T> : MonoBehaviour where T : Component
+    public class LXF_Singleton<T> : LXF_MonoYield where T : Component
     {
         public static T Instance
         {
@@ -1189,20 +1147,22 @@ namespace LXF_Framework
 
         public float InitializationTime { get; private set; }
 
-
+        //[RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         /// <summary>
         /// make sure to call base.Awake() in override if you need awake
         /// </summary>
         protected virtual void Awake()
         {
-            InitializeSingleton();
+            
         }
 
-        protected virtual void InitializeSingleton()
+        protected void InitializeSingleton(bool isPrisentInAnyScene)
         {
             if (!Application.isPlaying) return;
             InitializationTime = Time.time;
-            DontDestroyOnLoad(gameObject);
+
+            if(isPrisentInAnyScene)
+                DontDestroyOnLoad(gameObject);
 
             T[] oldInstances = FindObjectsByType<T>(FindObjectsSortMode.None);
             foreach (T old in oldInstances)
@@ -1221,6 +1181,7 @@ namespace LXF_Framework
             {
                 if (instance != this)
                 {
+                    Debug.LogWarning("Multiple instances of " + typeof(T) + " found. Destroying additional instance.");
                     Destroy(gameObject);
                 }
             }
@@ -1242,82 +1203,176 @@ namespace LXF_Framework
 
             DontDestroyOnLoad(gameObject);
         }
-    }
+    }  
+
     #endregion
 
-    #region Delayer
-
-    public static class Delayer
+    #region Timer
+    public class LXF_Timer 
     {
+        protected float m_TimerLifeTime;
+        private readonly Action OnTimerEnd;
+        private readonly Action OnTimerRunning;
+        private bool RUN;
+        public LXF_Timer()
+        {
+            m_TimerMode = TimerRunningMode.None;
+        }
 
-    }
+        public LXF_Timer(float lifeTime,Action onTimerEndcallback)
+        {
+            m_TimerMode = TimerRunningMode.WatchTimerEnd;
 
-    public class FrameDelayer
+            m_TimerLifeTime = lifeTime;
+            OnTimerEnd = onTimerEndcallback;
+        }
+
+        public LXF_Timer(float lifeTime, Action onTimerEndcallback, Action onTimerRunningCallback)
+        {
+            m_TimerMode = TimerRunningMode.WatchTimer;
+
+            m_TimerLifeTime = lifeTime;
+            OnTimerEnd = onTimerEndcallback;
+            OnTimerRunning = onTimerRunningCallback;        
+        }
+
+        protected enum TimerRunningMode
+        {
+            None,
+            WatchTimerEnd,
+            WatchTimer
+        }
+        protected enum TimerState
+        {
+            STOP,
+            RUNNING,
+        }
+
+        protected TimerRunningMode m_TimerMode;
+        protected TimerState m_TimerState;
+
+        public float TimerRunningTime { get; private set; } = 0;
+
+
+        public void Reset()=> TimerRunningTime = 0;
+   
+
+        public void Start()
+        {
+            Reset();
+
+            Running().Forget();
+        }
+
+        public float Start(float startTime)
+        {
+            TimerRunningTime = startTime;
+
+            Running().Forget();
+
+            return TimerRunningTime;
+        }
+
+        public float Pause()
+        {
+            RUN = false;
+            return TimerRunningTime;
+        }
+        public async UniTask<float> Pause(Action onPauseCallback)
+        {
+            RUN = false;
+            await UniTask.WaitUntil(() => m_TimerState == TimerState.STOP);
+            onPauseCallback?.Invoke();
+            return TimerRunningTime;
+        }
+
+        public float Resume()
+        {
+            Running().Forget();
+
+            return TimerRunningTime;
+        }
+      
+
+        private async UniTask Running()
+        {
+            m_TimerState = TimerState.RUNNING;
+            switch (m_TimerMode)
+            {
+                case TimerRunningMode.None:
+                    RUN = true;
+                    while (RUN)
+                    {
+                        await UniTask.Yield();
+                        TimerRunningTime += Time.deltaTime;
+                    }
+                    break;
+                case TimerRunningMode.WatchTimerEnd:
+                    RUN = true;
+                    while (RUN)
+                    {
+                        await UniTask.Yield();
+                        TimerRunningTime += Time.deltaTime;
+
+                        if (TimerRunningTime >= m_TimerLifeTime)
+                        {
+                            OnTimerEndCallback();
+                            break;
+                        }
+                    }                
+                    break;
+                case TimerRunningMode.WatchTimer:
+                    RUN = true;
+                    while (RUN)
+                    {                  
+                        await UniTask.Yield();
+                        TimerRunningTime += Time.deltaTime;
+                        OnTimerRunningCallback();
+
+                        if (TimerRunningTime >= m_TimerLifeTime)
+                        {
+                            OnTimerEndCallback();
+                            break;
+                        }
+                    }               
+                    break;                    
+            }
+
+            m_TimerState = TimerState.STOP;
+        }
+
+        protected virtual void OnTimerEndCallback() =>OnTimerEnd?.Invoke();
+        protected virtual void OnTimerRunningCallback() => OnTimerRunning?.Invoke();
+    }  
+
+    public class LXF_Timer<T> :LXF_Timer
     {
-        public FrameDelayer()
-        {
-            timeCounter = 0;
-            valueTimeCounter = 0;
-            valueTimeCounter1 = 0;
-            valueTimeCounter2 = 0;
-        }
-        private float timeCounter;
+        readonly Action<T> OnTimerEnd;
+        readonly Action<T> OnTimerRunning;
+        readonly T TObject;
 
-        public void DelayFunc(float seconds, Action callback)
+        public LXF_Timer(T obj, float lifeTime, Action<T> onTimerEndcallback)
         {
-            timeCounter += Time.deltaTime;
-            if (timeCounter >= seconds)
-            {
-                timeCounter = 0;
-                callback?.Invoke();
-            }
+            m_TimerMode = TimerRunningMode.WatchTimerEnd;
+
+            TObject = obj;
+            OnTimerEnd = onTimerEndcallback;
+            m_TimerLifeTime = lifeTime;
         }
 
-        private float valueTimeCounter;
-        public void DelayValue(ref float value, float endValue, float time)
+        public LXF_Timer(T obj, float lifeTime, Action<T> onTimerEndcallback, Action<T> onTimerRunningCallback)
         {
-            if (valueTimeCounter >= time || MathF.Abs(value - endValue) < 0.5f)
-            {
-                valueTimeCounter = 0;
-                return;
-            }
-            else
-            {
-                valueTimeCounter += Time.deltaTime;
-                value = Mathf.Lerp(value, endValue, valueTimeCounter / time);
-            }
-        }
-        private float valueTimeCounter1;
-        public float DelayValue(float value, float endValue, float time)
-        {
-            if (valueTimeCounter1 >= time || MathF.Abs(value - endValue) < 0.5f)
-            {
-                valueTimeCounter1 = 0;
-                return endValue;
-            }
-            else
-            {
-                valueTimeCounter1 += Time.deltaTime;
-                return Mathf.Lerp(value, endValue, valueTimeCounter1 / time);
-            }
+            m_TimerMode = TimerRunningMode.WatchTimer;
+
+            TObject = obj;
+            OnTimerEnd = onTimerEndcallback;
+            OnTimerRunning = onTimerRunningCallback;
+            m_TimerLifeTime = lifeTime;
         }
 
-        private float valueTimeCounter2;
-        public Quaternion DelayValue(Quaternion value, Quaternion endValue, float time)
-        {
-            if (valueTimeCounter2 >= time || Quaternion.Angle(value, endValue) < 0.5f)
-            {
-                valueTimeCounter2 = 0;
-                return endValue;
-            }
-            else
-            {
-                valueTimeCounter2 += Time.deltaTime;
-                return Quaternion.Lerp(value, endValue, valueTimeCounter2 / time);
-            }
-        }
+        protected override void OnTimerEndCallback() => OnTimerEnd?.Invoke(TObject);
+        protected override void OnTimerRunningCallback() => OnTimerRunning?.Invoke(TObject);
     }
-
     #endregion
 
     #region Value Monitor
@@ -1434,60 +1489,6 @@ namespace LXF_Framework
 
     #endregion
 
-    #region new MCCV----->System
-    // LXF_Model：数据的集合 （继承MonoBehaviour）
-    public abstract class LXF_Model : LXF_Singleton<LXF_Model>
-    {
-        protected abstract void LoadData();
-    }
-
-    // LXF_View: 提供视图物体引用，并监听数据的变化 （继承MonoBehaviour）
-    public abstract class LXF_View : LXF_Singleton<LXF_View>
-    {
-        protected abstract void GetModel();
-    }
-
-    //LXF_ModelController: 提供变更数据的方法
-    public abstract class LXF_ModelController<T> where T:LXF_Model
-    {
-        protected T m;
-        protected abstract void Init(T m);
-    }
-    //LXF_ViewController: 提供操作视图的方法
-    public abstract class LXF_ViewController<T> where T : LXF_View
-    {
-        protected T v;
-        protected abstract void Init(T v);
-    }
-    //LXF_System: 获得LXF_ModelController和LXF_ViewController，组织调用其所有的方法 （继承MonoBehaviour）
-    public abstract class LXF_System<CM, CV> :LXF_Singleton<LXF_System<CM, CV>> 
-    {
-        protected CM cm;
-        protected CV cv;
-        protected abstract void Init(CM cm, CV cv);
-    }
-
-    #endregion
-
-    #region Main Script Manage
-    public abstract class MainScript : MonoBehaviour
-        {
-            protected virtual void Awake()
-            {
-                GetReferences();
-            }
-
-            protected abstract void GetReferences();
-
-            protected T GetComponentBySelf<T>(T component) where T : Component
-            {
-                if (component) return component;
-                else if (component = GetComponent<T>()) return component;
-                else return gameObject.AddComponent<T>();
-            }
-        }
-        #endregion
-
     #region Event Runner
     public class EventRunner 
     {
@@ -1502,14 +1503,8 @@ namespace LXF_Framework
         {
             mOnEvent += onEvent;
         }
-        public void Register(Action[] onEvents)
-        {
-            foreach(var onEvent in onEvents)
-            {
-                mOnEvent += onEvent;
-            }    
-        }
 
+        public int EventNum=>mOnEvent.GetInvocationList().Length;
         /// <summary>
         /// 限制同一事件重复注册
         /// </summary>
@@ -1530,22 +1525,14 @@ namespace LXF_Framework
             }
         }
        
-        public void TriggerToClear()
-        {
-            Run();
-            mOnEvent = () => { };
-        }
         public void Run() => mOnEvent?.Invoke();
-        public void Run(Action onEvent)
-        {
-            Run();             
-            UnRegister(onEvent);
-        }
     }
 
     public class EventRunner<T>
     {
         private Action<T> mOnEvent;
+
+        public int EventNum=>mOnEvent.GetInvocationList().Length;
 
         public void UnRegister(Action<T> onEvent)
         {
@@ -1560,15 +1547,27 @@ namespace LXF_Framework
         public void Clear() => mOnEvent = null;
 
         public void Run(T t) => mOnEvent?.Invoke(t);
+        // public void Run(T t, EventRunMode mode){
+        //     switch(mode){
+        //         case EventRunMode.Single:
+        //             mOnEvent?.Invoke(t);
+        //             UnRegister();
+        //             break;
+        //     }
+        //}
     }
+
+    // public enum EventRunMode{
+    //     Single,
+    //     Multiple,
+    // }
     #endregion
 
     #region Object Pool
-    public class LXF_BasePool<T> : MonoBehaviour where T : Component
+    public abstract class LXF_BasePool<T> : LXF_Singleton<LXF_BasePool<T>> where T : Component
     {
-        public static LXF_BasePool<T> Instance { get; protected set; }
+        protected abstract Transform PoolManager{get;}
 
-        private T prefab;
         [SerializeField] int defaultSize = 100;
         [SerializeField] int maxSize = 500;
 
@@ -1579,9 +1578,15 @@ namespace LXF_Framework
         public int TotalCount => pool.CountAll;
 
         protected void Initialize() =>
-            pool = new ObjectPool<T>(OnCreatPoolItem, OnGetPoolItem, OnReleasePoolItem, OnDestroyPoolItem, false, defaultSize, maxSize);
+            pool = new ObjectPool<T>(OnCreatePoolItem, OnGetPoolItem, OnReleasePoolItem, OnDestroyPoolItem, false, defaultSize, maxSize);
 
-        protected virtual T OnCreatPoolItem() => Instantiate(prefab);
+        protected abstract T Create();
+
+        protected T OnCreatePoolItem(){
+            T obj = Create();
+            obj.transform.SetParent(PoolManager);
+            return obj;
+        }
         protected virtual void OnGetPoolItem(T obj) => obj.gameObject.SetActive(true);
         protected virtual void OnReleasePoolItem(T obj) => obj.gameObject.SetActive(false);
         protected virtual void OnDestroyPoolItem(T obj) => Destroy(obj.gameObject);
@@ -1593,94 +1598,177 @@ namespace LXF_Framework
     }
     #endregion
 
-    #region Tools
-    public static class TransformTools
+    #region State Machine
+    public interface IState
     {
-        public static Transform[] GetAllChildTransform(this Transform transform)
+        void Enter();
+        void Execute();
+        void Exit();
+    }
+
+    
+    public class StateMachine
+    {
+        private IState currentState;
+        private Dictionary<string, IState> states;
+        private bool isPaused;
+
+        public StateMachine()
         {
-            int childCount = transform.childCount;
-            var childs= new Transform[childCount];
-            for (int i = 0; i < childCount; i++)
+            states = new Dictionary<string, IState>();
+            isPaused = false;
+        }
+
+        public void AddState(string key, IState state)
+        {
+            if (!states.ContainsKey(key))
             {
-                childs[i] = transform.GetChild(i);
+                states.Add(key, state);
+            }
+        }
+
+        public void RemoveState(string key)
+        {
+            if (states.ContainsKey(key))
+            {
+                if (currentState == states[key])
+                {
+                    currentState.Exit();
+                    currentState = null;
+                }
+                states.Remove(key);
+            }
+        }
+
+        public void ChangeState(string key)
+        {
+            if (states.ContainsKey(key))
+            {
+                if (currentState != null)
+                {
+                    currentState.Exit();
+                }
+
+                currentState = states[key];
+                currentState.Enter();
+            }
+        }
+
+        public void Update()
+        {
+            if (isPaused || currentState == null)
+            {
+                return;
             }
 
-            return childs;
+            currentState.Execute();
+        }
+
+        public void Pause()
+        {
+            isPaused = true;
+        }
+
+        public void Resume()
+        {
+            isPaused = false;
         }
     }
+
     #endregion
 
     #region AudioKit
     [DefaultExecutionOrder(-1)]
-    public abstract class LXF_AudioKit : LXF_Singleton<LXF_AudioKit>{
-        private AudioSource _audioSource;
-        protected Dictionary<string,AudioClip> audioSources = new();
+    public abstract class LXF_AudioKit : LXF_Singleton<LXF_AudioKit>
+    {
+        private Dictionary<string,AudioClip> _audioClips = new();
+    
+        private AudioSource[] _audioSources=>GetComponents<AudioSource>();
+    
         protected new virtual void Awake()
         {
             base.Awake();
             Init();
-            _audioSource=gameObject.AddComponent<AudioSource>();
         }
-
+    
         protected abstract void Init();
-        public void Play(string audioClipName){
-            if(!audioSources.ContainsKey(audioClipName)){
-                Debug.LogError($"AudioClip {audioClipName} 不存在！");
+    
+        public void Play(string audioClipName,bool isLoop=false)=> Play(audioClipName,GetFreeAudioSource,isLoop);
+        public void PlaSingle(string audioClipName,bool isLoop=false)=> Play(audioClipName,()=> GetTargetAudioSource(audioClipName),isLoop);
+        public void Pause(string audioClipName) => GetTargetAudioSource(audioClipName)?.Pause();
+        public void PauseAll()
+        {
+            foreach (var source in _audioSources)
+            {
+                source.Pause();
+            }            
+        }
+        public void Resume(string audioClipName) => GetTargetAudioSource(audioClipName)?.UnPause();
+
+        public void ResumeAll()
+        {
+            foreach (var source in _audioSources)
+            {
+                source.UnPause();
+            }
+        }
+        public void StopAll()
+        {
+            foreach (var source in _audioSources)
+            {
+                source.Stop();
+            }
+        }
+        public void Stop(string audioClipName) => GetTargetAudioSource(audioClipName)?.Stop();
+    
+        private void Play(string audioClipName,Func<AudioSource> sourceGetter ,bool isLoop=false){
+            if(!_audioClips.ContainsKey(audioClipName)){
+                Debug.LogError($"AudioClip {audioClipName} not exist！");
                 return;
             }
-            AudioClip audioClip=audioSources[audioClipName];
-            _audioSource.clip=audioClip;
-            _audioSource.Play();
+            AudioClip audioClip=_audioClips[audioClipName];
+            var audioSource=sourceGetter();
+    
+            if(audioSource)
+            {
+                audioSource.clip=audioClip;
+                audioSource.loop=isLoop;
+                audioSource.Play();
+            }           
         }
-
+    
         protected void AddAudioClip(string audioClipName,AudioClip audioClip){
-            audioSources.Add(audioClipName,audioClip);
+            _audioClips.Add(audioClipName,audioClip);
         }
-    }
-    #endregion
-    #region Debugger
-    public static class Debugger
-    {
-        /// <summary>
-    /// 检查指定的引用类型对象是否为空，并打印结果。
-    /// </summary>
-    /// <typeparam name="T">引用类型</typeparam>
-    /// <param name="obj">要检查的对象</param>
-    public static void CheckIfObjectIsNull<T>(T obj) where T : class
-    {
-        if (obj == null)
+    
+        private AudioSource GetTargetAudioSource(string audioClipName)
+         {
+            foreach(var source in _audioSources)
+            {
+                if(source.clip.Equals(_audioClips[audioClipName])&&
+                     source.isPlaying) return source;                   
+            }
+
+            return GetFreeAudioSource();
+         }
+        
+        private AudioSource GetFreeAudioSource()
         {
-            Debug.LogError($"传入的对象为空！");
-        }
-        else
-        {
-            Debug.Log($"传入的对象 {GetObjectName(obj)} 存在。");
+            foreach(var source in _audioSources)
+            {
+               if(!source.isPlaying&& source.time == 0){
+
+                   return source;
+               }            
+            }
+             
+             return gameObject.AddComponent<AudioSource>();
         }
     }
 
-    /// <summary>
-    /// 获取对象的名称。如果对象是GameObject或Component，返回它们的名称；否则返回对象的类型名称。
-    /// </summary>
-    /// <typeparam name="T">引用类型</typeparam>
-    /// <param name="obj">要获取名称的对象</param>
-    /// <returns>对象的名称</returns>
-    private static string GetObjectName<T>(T obj) where T : class
-    {
-        if (obj is GameObject gameObject)
-        {
-            return gameObject.name;
-        }
-        else if (obj is Component component)
-        {
-            return component.gameObject.name + " (" + component.GetType().Name + ")";
-        }
-        else
-        {
-            return obj.GetType().Name;
-        }
-    }
-    }
     #endregion
+
+    
 }
 
 

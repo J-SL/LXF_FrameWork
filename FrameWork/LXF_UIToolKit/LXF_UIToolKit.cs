@@ -1,16 +1,13 @@
-using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using LXF_UISystem;
+using LXF_Framework.LXF_UISystem;
 using LXF_UIToolKit.UITools;
-using LXF_UISystem.OperateRect;
+using LXF_Framework.LXF_UISystem.OperateRect;
 using UnityEngine.UI;
 using TMPro;
-using LXF_UISystem.Operator;
+using LXF_Framework.LXF_UISystem.Operator;
 using LXF_Framework.TweenSystem;
 using System;
-using UnityEngine.Events;
-using System.Linq;
 
 namespace LXF_UIToolKit
 {
@@ -36,7 +33,7 @@ namespace LXF_UIToolKit
         public static class Tools
         {
             /// <summary>
-            /// ï¿½ï¿½ï¿½ï¿½GetPosRelativedCanvasï¿½ï¿½Ãµï¿½Öµ
+            /// ´«ÈëGetPosRelativedCanvas»ñµÃµÄÖµ
             /// </summary>
             /// <returns>AnchoredPosition</returns>
             public static Vector2 GetDynamicAnchoredPosition(Vector2 posRelativedCanvas, RectTransform canvas) =>
@@ -75,7 +72,7 @@ namespace LXF_UIToolKit
             }
 
             /// <summary>
-            /// ï¿½Ãµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ñ¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+            /// µÃµ½ËùÓÐÒÑ¼¤»îµÄ×ÓÎïÌå
             /// </summary>
             public static List<GameObject> GetActiveChildren(this RectTransform r)
             {
@@ -103,11 +100,11 @@ namespace LXF_UIToolKit
                 bar.WidthTween(bar.GetWidth() + differenceWidth, duration, callback);
             }
             /// <summary>
-            /// Ä¬ï¿½ï¿½pivotï¿½ï¿½ï¿½ï¿½ï¿½,×¢ï¿½ï¿½Ê¹ï¿½Ã´Ë·ï¿½ï¿½ï¿½Ê±Ãªï¿½ã²»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½×´Ì¬
+            /// Ä¬ÈÏpivotÊÇ×ó±ß,×¢ÒâÊ¹ÓÃ´Ë·½·¨Ê±Ãªµã²»¿ÉÊÇÀ­Éì×´Ì¬
             /// </summary>
-            /// <param name="mian">ï¿½ï¿½Bar</param>
-            /// <param name="mask">ï¿½ï¿½Bar</param>
-            /// <param name="percentage">ï¿½Ù·Ö±ï¿½Width</param>
+            /// <param name="mian">Ö÷Bar</param>
+            /// <param name="mask">¸±Bar</param>
+            /// <param name="percentage">°Ù·Ö±ÈWidth</param>
             public static void DoubleBarWidthBuffer(RectTransform main,RectTransform mask,float differenceWidth, float duration)
             {
                 var slowBar = differenceWidth >= 0 ? mask : main;
@@ -115,7 +112,7 @@ namespace LXF_UIToolKit
                 slowBar.WidthTween(slowBar.GetWidth() + differenceWidth, duration,()=> quickBar.SetWidth(slowBar.GetWidth()));
             }
             /// <summary>
-            /// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½rectï¿½ï¿½Widthï¿½ï¿½Ð¡Öµï¿½ï¿½ï¿½ï¿½ï¿½Öµ
+            /// ¿ÉÏÞÖÆrectµÄWidth×îÐ¡ÖµºÍ×î´óÖµ
             /// </summary>
             public static void DoubleBarWidthBuffer(RectTransform main, RectTransform mask,float recrMin,float rectMax,
                 float differenceWidth, float duration)
@@ -126,7 +123,7 @@ namespace LXF_UIToolKit
             }
 
             /// <summary>
-            /// Ê¹ï¿½ï¿½ï¿½ï¿½Í¼Æ¬ï¿½ï¿½Textï¿½Ä±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Õ¹
+            /// Ê¹±³¾°Í¼Æ¬ËæTextÎÄ±¾¿òÏòÏÂÑÓÕ¹
             /// </summary>
             public static void AdaptiveTextBox(RectTransform img,RectTransform text,float gap)=>img.SetHeight(text.GetHeight()+gap);
             public static void AdaptiveTextBox(RectTransform img, float gap) => img.SetHeight(img.GetComponentInChildren<RectTransform>().GetHeight() + gap);
@@ -268,7 +265,7 @@ namespace LXF_UIToolKit
         public static class FindAllChildrenImageAndText
         {
             /// <summary>
-            /// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ñ¡ï¿½ï¿½ï¿½Ç·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+            /// ·µ»ØËùÓÐ×ÓÎïÌåµÄ×é¼þ£¬¿ÉÑ¡ÔñÊÇ·ñ°üº¬×ÔÉí¡£
             /// </summary>
             public static (Image[], TMP_Text[]) GetAllChildrenImageAndText(RectTransform r,bool includeSelf=true)
             {
@@ -297,7 +294,7 @@ namespace LXF_UIToolKit
             }
 
             /// <summary>
-            /// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö»ï¿½ï¿½ï¿½ï¿½ï¿½Ñ¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+            /// ²»°üº¬×ÔÉí£¬ÇÒÖ»·µ»ØÒÑ¼¤»îµÄ×ÓÎïÌå×é¼þ
             /// </summary>
             public static (Image[], TMP_Text[]) GetAllActiveChildrenImageAndText(RectTransform r)
             {            
@@ -377,18 +374,18 @@ namespace LXF_UIToolKit
        public static class DropDownPrefab
         {
             /// <summary>
-            /// ï¿½ï¿½Ö¸ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Â³ï¿½Ò»Ïµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ëµï¿½
+            /// ÔÚÖ¸¶¨¸¸ÎïÌåÏÂ³ÉÒ»ÏµÁÐÏÂÀ­²Ëµ¥
             /// </summary>
-            /// <param name="list">ï¿½æ´¢UIï¿½ï¿½ï¿½Ð±ï¿½</param>
-            /// <param name="num">ï¿½ï¿½ï¿½ï¿½ï¿½Éµï¿½UIï¿½ï¿½ï¿½ï¿½</param>
-            /// <param name="originPos">ï¿½ï¿½ï¿½Ä¿ï¿½ê¸¸ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Éµï¿½Î»ï¿½ï¿½</param>
-            /// <param name="arriveTime"ï¿½ï¿½ï¿½ï¿½UIï¿½ï¿½ï¿½ï¿½Ö¸ï¿½ï¿½Î»ï¿½Ãµï¿½Ê±ï¿½ï¿½></param>
-            /// <param name="nextImgDeltaTime">ï¿½ï¿½ï¿½Éµï¿½ï¿½ï¿½ï¿½Úµï¿½UIï¿½ï¿½ï¿½ï¿½Ä¿ï¿½ÄµØµï¿½Ê±ï¿½ï¿½ï¿½ï¿½</param>
-            /// <param name="appearTime">UIï¿½ï¿½ï¿½Öµï¿½Ê±ï¿½ï¿½</param>
-            /// <param name="nextImgDeltaAppearTime">ï¿½ï¿½ï¿½ï¿½ï¿½Éµï¿½ï¿½ï¿½ï¿½Úµï¿½UIï¿½ï¿½ï¿½Öµï¿½Ê±ï¿½ï¿½Ö®ï¿½ï¿½</param>
-            /// <param name="disAppearTime">UIï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê±ï¿½ï¿½</param>
-            /// <param name="nextImgDeltaDisAppearTime">ï¿½ï¿½ï¿½ï¿½ï¿½Éµï¿½ï¿½ï¿½ï¿½Úµï¿½UIï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê±ï¿½ï¿½Ö®ï¿½ï¿½</param>
-            /// <param name="gap">ï¿½ï¿½ï¿½ï¿½UIï¿½Ä¼ï¿½ï¿½</param>
+            /// <param name="list">´æ´¢UIµÄÁÐ±í</param>
+            /// <param name="num">ÐèÉú³ÉµÄUIÊýÁ¿</param>
+            /// <param name="originPos">Ïà¶ÔÄ¿±ê¸¸ÎïÌåÉú³ÉµÄÎ»ÖÃ</param>
+            /// <param name="arriveTime"Éú³ÉUIµ½´ïÖ¸¶¨Î»ÖÃµÄÊ±¼ä></param>
+            /// <param name="nextImgDeltaTime">Éú³ÉµÄÏàÁÚµÄUIµ½´ïÄ¿µÄµØµÄÊ±¼ä¼ä¸ô</param>
+            /// <param name="appearTime">UI¸¡ÏÖµÄÊ±³¤</param>
+            /// <param name="nextImgDeltaAppearTime">ÓëÉú³ÉµÄÏàÁÚµÄUI¸¡ÏÖµÄÊ±¼äÖ®²î</param>
+            /// <param name="disAppearTime">UI½¥ÒþµÄÊ±³¤</param>
+            /// <param name="nextImgDeltaDisAppearTime">ÓëÉú³ÉµÄÏàÁÚµÄUI½¥ÒþµÄÊ±¼äÖ®²î</param>
+            /// <param name="gap">ÏàÁÚUIµÄ¼ä¸ô</param>
             public static void SimpleDropDownMenu(List<RectTransform> list, int num,
                 Vector2 originPos,  float arriveTime, float nextImgDeltaTime, float appearTime, float nextImgDeltaAppearTime,
                 float disAppearTime, float nextImgDeltaDisAppearTime, float gap = 0)
