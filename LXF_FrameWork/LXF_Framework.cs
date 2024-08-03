@@ -6,6 +6,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.Serialization.Formatters.Binary;
+using Newtonsoft.Json;
 using UnityEngine;
 using UnityEngine.Pool;
 using UnityEngine.SceneManagement;
@@ -902,6 +903,7 @@ namespace LXF_Framework
 
             void D2M(DataCollection data);
         }
+        [Obsolete]
         public static class Saver
         {
             public static void BinarySave(ISaveLoad save, string dataName)
@@ -926,7 +928,7 @@ namespace LXF_Framework
                 Debug.Log("Created a file to save: " + filePath);
             }
         }
-
+        [Obsolete]
         public static class Loader
         {
             public static void BinaryLoad(ISaveLoad load, string dataName)
@@ -978,6 +980,125 @@ namespace LXF_Framework
                     Debug.LogError($"Load failed, please check {filePath}");
                 }
             }
+        }
+
+
+
+        //====================================================================================
+
+        public static class LXF_SaveSystem
+        {
+
+            public readonly static string FilePath = Application.persistentDataPath;
+
+            public static void SaveAll(IEnumerable<ISerialization> objs)
+            {
+                foreach (var obj in objs)
+                {
+                    Save(obj);
+                }
+            }
+
+            public static void LoadAll(IEnumerable<ISerialization> objs)
+            {
+                foreach (var obj in objs)
+                {
+                    Load(obj);
+                }
+            }
+
+            public static void Save(ISerialization obj) => obj.Serialize(new LXF_Saver(obj.FileName));
+
+            public static void Load(ISerialization obj) => obj.Deserialize(new LXF_Loader(obj.FileName));           //private static
+        }
+
+        public interface ISerialization
+        {
+            string FileName { get; set; }
+            void Serialize(LXF_Saver saver);
+            void Deserialize(LXF_Loader loader);
+        }
+
+        public class LXF_Saver
+        {
+            readonly string _filePath;
+            public LXF_Saver(string fileName)
+            {
+                _filePath = LXF_SaveSystem.FilePath + "/" + fileName;
+
+                if (!File.Exists(_filePath))
+                {
+                    Debug.Log($"{_filePath} not exist, automatically create a new file");
+                }
+            }
+            public Dictionary<string, string> Values { get; private set; } = new();
+
+            public void Add<T>(string valueName, T value) where T : struct
+            {
+                string json = JsonConvert.SerializeObject(value);
+                Values.Add(valueName, json);
+            }
+
+            public void Add(string valueName, IntegerMonitor integer)
+            {
+                string json = JsonConvert.SerializeObject(integer);
+                Values.Add(valueName, json);
+            }
+
+            public void Add(string valueName, FloatMonitor _float)
+            {
+                string json = JsonConvert.SerializeObject(_float);
+                Values.Add(valueName, json);
+            }
+
+            public void Add(string valueName, BoolenMonitor boolen)
+            {
+                string json = JsonConvert.SerializeObject(boolen);
+                Values.Add(valueName, json);
+            }
+
+            public void End()
+            {
+                string jsonString = JsonConvert.SerializeObject(Values, Formatting.Indented);
+                File.WriteAllText(_filePath, jsonString);
+            }
+        }
+
+        public class LXF_Loader
+        {
+
+            public LXF_Loader(string fileName)
+            {
+                string filePath = LXF_SaveSystem.FilePath + "/" + fileName;
+
+                if (File.Exists(filePath))
+                {
+                    string jsonData = File.ReadAllText(filePath);
+                    Values = JsonConvert.DeserializeObject<Dictionary<string, string>>(jsonData);
+                }
+                else
+                {
+                    Debug.LogError($"Load failed, please check {filePath}");
+                }
+            }
+
+            private Dictionary<string, string> Values = new();
+
+
+            private T GetValue<T>(string valueKey) where T : struct
+            {
+                if (Values.ContainsKey(valueKey))
+                {
+                    return JsonConvert.DeserializeObject<T>(Values[valueKey]);
+                }
+                else
+                {
+                    throw new KeyNotFoundException($"Key '{valueKey}' not found in the dictionary.");
+                }
+            }
+
+            public void OnLoad<T>(string valueName, ref T value) where T : struct
+                => value = GetValue<T>(valueName);
         }
 
     }
@@ -1096,6 +1217,8 @@ namespace LXF_Framework
             {
                 gameObject.SetActive(true);
 
+                if (IsInjected) return;
+
                 var monoBehaviours = gameObject.GetComponentsInChildren<LXF_MonoYield>();
 
                 foreach (var mb in monoBehaviours)
@@ -1110,6 +1233,8 @@ namespace LXF_Framework
             public T Instantiate_DI<T>(T prefab) where T : Component
             {
                 var instance = Instantiate(prefab);
+
+                if(IsInjected) return instance;
 
                 var monoBehaviours = instance.GetComponentsInChildren<LXF_MonoYield>();
 
@@ -1242,16 +1367,18 @@ namespace LXF_Framework
             WatchTimerEnd,
             WatchTimer
         }
-        protected enum TimerState
+        private enum TimerState
         {
             STOP,
             RUNNING,
+            End
         }
 
         protected TimerRunningMode m_TimerMode;
-        protected TimerState m_TimerState;
+        private TimerState m_TimerState;
 
         public float TimerRunningTime { get; private set; } = 0;
+        public bool IsEnd => m_TimerState == TimerState.End;
 
 
         public void Reset()=> TimerRunningTime = 0;
@@ -1263,10 +1390,27 @@ namespace LXF_Framework
 
             Running().Forget();
         }
+        public void Start(Action onStartCallback)
+        {
+            Reset();
 
+            onStartCallback?.Invoke();
+
+            Running().Forget();
+        }
         public float Start(float startTime)
         {
             TimerRunningTime = startTime;
+
+            Running().Forget();
+
+            return TimerRunningTime;
+        }
+        public float Start(float startTime,Action onStartCallback)
+        {
+            TimerRunningTime = startTime;
+
+            onStartCallback?.Invoke();
 
             Running().Forget();
 
@@ -1306,6 +1450,7 @@ namespace LXF_Framework
                         await UniTask.Yield();
                         TimerRunningTime += Time.deltaTime;
                     }
+                    m_TimerState = TimerState.End;
                     break;
                 case TimerRunningMode.WatchTimerEnd:
                     RUN = true;
@@ -1317,6 +1462,7 @@ namespace LXF_Framework
                         if (TimerRunningTime >= m_TimerLifeTime)
                         {
                             OnTimerEndCallback();
+                            m_TimerState = TimerState.End;
                             break;
                         }
                     }                
@@ -1332,6 +1478,7 @@ namespace LXF_Framework
                         if (TimerRunningTime >= m_TimerLifeTime)
                         {
                             OnTimerEndCallback();
+                            m_TimerState = TimerState.End;
                             break;
                         }
                     }               
@@ -1606,74 +1753,161 @@ namespace LXF_Framework
         void Exit();
     }
 
-    
-    public class StateMachine
+    public class StateMachineBase
     {
         private IState currentState;
-        private Dictionary<string, IState> states;
-        private bool isPaused;
+        private string defaultKey;
+        private readonly Dictionary<string, IState> m_states;
 
-        public StateMachine()
+        public enum MachineState
         {
-            states = new Dictionary<string, IState>();
-            isPaused = false;
+            RUNNING,
+            PAUSED,
+            STANDBY
+        }
+        protected MachineState m_MachineState;
+
+        public StateMachineBase()
+        {
+            m_MachineState = MachineState.STANDBY;
+            m_states = new Dictionary<string, IState>();
         }
 
-        public void AddState(string key, IState state)
+        public IBuilder MachineBuilder(string defaultKey)
         {
-            if (!states.ContainsKey(key))
+            this.defaultKey = defaultKey;
+
+            return new StateMachineBuilder(this);
+        }
+
+        public interface IBuilder
+        {
+            IBuilder AddState(string keyName,IState state);
+        }
+
+        private class StateMachineBuilder : IBuilder
+        {
+            public StateMachineBase _stateMachine;
+
+            public StateMachineBuilder(StateMachineBase stateMachine)
             {
-                states.Add(key, state);
+                _stateMachine = stateMachine;
+            }
+
+            public IBuilder AddState(string keyName,IState state)
+            {
+                _stateMachine.AddState(keyName,state);
+
+                return this;
+            }
+        }
+
+        private void AddState(string key, IState state)
+        {
+            if (!m_states.ContainsKey(key))
+            {
+                m_states.Add(key, state);
             }
         }
 
         public void RemoveState(string key)
         {
-            if (states.ContainsKey(key))
+            if (m_states.ContainsKey(key))
             {
-                if (currentState == states[key])
+                if (currentState == m_states[key])
                 {
                     currentState.Exit();
                     currentState = null;
                 }
-                states.Remove(key);
+                m_states.Remove(key);
+            }
+        }    
+
+        public IStateController Start()
+        {
+            currentState = m_states[defaultKey];
+
+            m_MachineState = MachineState.RUNNING;
+
+            _ = RUNCORE();
+
+            return new StateController(this);
+        }
+
+        private async UniTask RUNCORE()
+        {
+            while (true)
+            {
+                if (m_MachineState == MachineState.PAUSED)
+                {
+                    await UniTask.Yield();
+                    continue;
+                }
+
+                if (m_MachineState == MachineState.RUNNING)
+                {
+                    currentState?.Execute();
+                }
+
+                if (m_MachineState == MachineState.STANDBY)
+                {
+                    break;
+                }
+
+                await UniTask.Yield();
             }
         }
 
-        public void ChangeState(string key)
+        private void Pause() => m_MachineState = MachineState.PAUSED;
+        private void Run() => m_MachineState = MachineState.RUNNING;
+        private void Stop() => m_MachineState = MachineState.STANDBY;
+        private void SetState(string key)
         {
-            if (states.ContainsKey(key))
+            if (m_states.ContainsKey(key))
             {
-                if (currentState != null)
-                {
-                    currentState.Exit();
-                }
+                currentState?.Exit();
 
-                currentState = states[key];
+                currentState = m_states[key];
                 currentState.Enter();
             }
         }
 
-        public void Update()
+        public interface IStateController
         {
-            if (isPaused || currentState == null)
+            void Pause();
+            void Run();
+            void Stop();
+            void SetState(string stateName);
+        }
+
+        private class StateController : IStateController
+        {
+            private readonly StateMachineBase _stateMachine;
+
+            public StateController(StateMachineBase stateMachine)
             {
-                return;
+                _stateMachine = stateMachine;
             }
 
-            currentState.Execute();
-        }
+            public void Pause() => _stateMachine.Pause();
+            public void Run() => _stateMachine.Run();
+     
+            public void Stop() => _stateMachine.Stop();
 
-        public void Pause()
-        {
-            isPaused = true;
-        }
-
-        public void Resume()
-        {
-            isPaused = false;
+            public void SetState(string stateName) => _stateMachine.SetState(stateName);
         }
     }
+
+    public abstract class LXF_FSM 
+    {
+        StateMachineBase m_StateMachine;
+
+        public LXF_FSM()
+        {
+          
+        }
+    }
+
 
     #endregion
 
@@ -1766,9 +2000,7 @@ namespace LXF_Framework
         }
     }
 
-    #endregion
-
-    
+    #endregion   
 }
 
 
